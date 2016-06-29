@@ -1,0 +1,73 @@
+.questionarea label{
+    font-size:30px;
+    font-family:sans-serif;
+    color:white;
+    font-weight:normal;
+    background-color:rgba(0,0,0,0.2);
+    padding:10px;
+    width:700px;
+
+}
+.questionarea .text,.questionarea .instruction{
+    font-size:45px;
+    font-family:sans-serif;
+    color:white;
+    font-weight:normal;
+    background:none;
+
+    padding:10px;
+    width:500px;
+}
+
+
+body{margin:0;padding:0;height:100%}
+
+
+
+.arrows>span{
+    float: none;
+    width: 200px;
+    height: 200px;
+    vertical-align: top;
+    padding: 20px;
+    position:absolute;
+    top:0;
+    left:0
+}
+.arrows>span:before {
+    width: 100px;
+    height: 100px;
+    background: rgba(0,0,0,0.5);
+    position: relative;
+    content: '';
+    display: block;
+    text-align: center;
+    left: 50px;
+    margin-bottom: 20px;
+    border-radius: 50%;
+}
+.arrows>span:after {
+    position: absolute;
+    top: 40px;
+    left: 100px;
+    content: '';
+    width: 0;
+    height: 0;
+    border-top: 30px solid transparent;
+    border-bottom: 30px solid transparent;
+    border-left: 50px solid white;
+}
+.arrows>span>label{
+    float: none;
+    background: transparent;
+    border: 0;
+    color: white;
+    font-size: 30px;
+    min-width: 100%;
+    text-align:center;
+    display:block;
+}
+.arrows>.prev:after{
+    transform:rotate(180deg);
+    left:85px;
+}
