@@ -1,5 +1,8 @@
+<!--must use the file served from aframe.io and not locally, otherwise a CORS issue appears on images for some reason-->
 <script src="https://aframe.io/releases/0.2.0/aframe.min.js"></script>
+<!--Helps to photograph HTML elements with their styles and wrap the images in canvas and use them as a shader to  texture surfaces-->
 <script src="/isa/BDJPFRDMEYBPBKLVADAYFQCDAVIOEQJR/vr-test/aframe-html-shader.min.js"></script>
+<!--the script that does all the job in the survey-->
 <script src="/isa/BDJPFRDMEYBPBKLVADAYFQCDAVIOEQJR/vr-test/vr-script.js"></script>
 
 <confirmit:wysiwygcomponent type="ProgressBar" id="77c4adfc-0a92-4386-a122-81e95b3b5dd8" />
@@ -9,7 +12,7 @@
 <div style="width:250px;">
     <confirmit:wysiwygcomponent type="PageArea" id="48d57f4d-e960-4aa0-bbd0-cb9cb38f31b4" /></div>
 <confirmit:wysiwygcomponent type="Navigation" id="2835528a-8bac-4a80-8c12-5261e4c96182" /><confirmit:wysiwygcomponent type="PoweredBy" id="464abb69-81b1-4cf0-9971-73c44ceb3f0d" />
-
+<!-- The arrows that will be drawn in the survey -->
 <div class="arrows">
   <span class="next">
     <label>Next</label>
@@ -19,8 +22,10 @@
   </span>
 </div>
 
+<!-- declaring the VR scene -->
 <a-scene>
     <a-assets>
+        <!-- most of the assets are backgrounds for questions, here to be precached -->
         <img id="logo" src="/isa/BDJPFRDMEYBPBKLVADAYFQCDAVIOEQJR/vr-test/confirmitLogo.png">
         <img id="intro" src="/isa/BDJPFRDMEYBPBKLVADAYFQCDAVIOEQJR/vr-test/intro.jpg">
         <img id="industry" src="/isa/BDJPFRDMEYBPBKLVADAYFQCDAVIOEQJR/vr-test/profession1.jpg">
@@ -46,16 +51,21 @@
 
 
     <a-entity id="questionHost" position="0 1 0">
+        <!-- the left half-shere from the viewpoint -->
         <a-entity class="leftCircle">
+            <!-- question text and instruction are dynamically inserted into/removed from #texthost -->
             <a-entity id="textHost" look-at="#camera" geometry="primitive:plane;width:10" material="transparent:true;opacity:0;" scale="0.9 0.9 0.9"></a-entity>
         </a-entity>
-
+        <!-- right half-sphere from viewpoint -->
         <a-entity class="rightCircle">
+            <!-- answer options are dynamically inserted/removed here -->
             <a-entity id="answersHost" look-at="#camera" geometry="primitive:plane;width:10" material="transparent:true;opacity:0" scale="1 1 1"></a-entity>
         </a-entity>
     </a-entity>
 
+    <!-- Confirmit branding under subject's feet -->
     <a-entity geometry="primitive:plane;width:10;height:6;" material="transparent:true;src: #logo" position="0 -20 4" rotation="-90 0 0"></a-entity>
+    <!-- the sky that represents the sphere in which a subject is place textured dynamically if dynamism is specified in the following script, but has a static default fallback in `src` attribute -->
     <a-sky color="#ECECEC" src="#intro"></a-sky>
 </a-scene>
 
@@ -65,7 +75,8 @@
 
     function setUpScene(){
         var body = document.querySelector('body');
-        body.classList.add('vr-sphere');
+        body.classList.add('vr-sphere'); // to apply styles to the questionarea elements to be properly captured as images
+        //to aid the page in authoring refresh
         document.querySelector('.a-enter-vr-button').setAttribute('type','button');
 
         var sky = SCENE.querySelector('a-sky');
@@ -88,7 +99,7 @@
             ]
         };
 
-        window.VR = new VRSurvey(SCENE);
+        window.VR = new VRSurvey(SCENE); //initialize the survey
     }
 
     if (SCENE.hasLoaded) {
