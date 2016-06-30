@@ -8,13 +8,16 @@ function VRSurvey(scene){
     var HOST = scene.querySelector('#questionHost');
     var TEXT = HOST.querySelector('#textHost');
     var ANSWERS = HOST.querySelector('#answersHost');
-    var QUESTIONS = [].slice.call(document.querySelectorAll('.questionarea'));
+    var QUESTIONS = [].slice.call(document.querySelectorAll('.questionarea')).filter(function(question){var excluded = question.querySelector('[id*=excluded]'); if(excluded){question.classList.add('excluded')}; return excluded?false:true;});
+    console.log(QUESTIONS);
     var QUESTIONS_LENGTH = QUESTIONS.length;
     var TOGGLE_DISTANCE = 0.7;
 
+    this.timer = [];
+
     /**
-     * Sets question  as answered by adding an '.answered' class to el `.questionarea`
-     * @param {HTMLElement} question - Element `.questionarea`
+     * Sets question  as answered/not answered by adding/removing an '.answered' class to el `.questionarea`
+     * @param {Object} question - object returned by `getQuestion()`
      * */
     this.setQuestionAnswered=function (question){
         if(this.questionIsAnswered(question)){
@@ -27,6 +30,11 @@ function VRSurvey(scene){
 
     };
 
+    /**
+     * Does dirtychecking if the question is answered by taking all borm elements (checkboxes and radios) and looking at their `checked` property
+     * @param {Object} question - object returned by `getQuestion()`
+     * @return {Boolean} - true if is answered
+     * */
     this.questionIsAnswered=function(question){
         var isAnswered = false;
         console.log(question);
@@ -105,10 +113,10 @@ function VRSurvey(scene){
     /**
      * Gets the whole model of the question
      * @param {HTMLElement} element - if necessary to get the certain `.questionarea`, pass it as a reference to its instance
-     * @return {{node: HTMLElement, text: Object, instruction: Object, answers: Array}}
+     * @return {{node: HTMLElement, text: String, instruction: Object, answers: Array}}
      * */
     this.getQuestion=function(element){
-        var question = element || document.querySelector('.questionarea:not(.answered)');
+        var question = element || document.querySelector('.questionarea:not(.answered):not(.excluded)');
         return question?{
             node: question,
             text: this.getText(question),
@@ -131,9 +139,13 @@ function VRSurvey(scene){
         }
     };
 
+    /**
+     * Gets an instance of a navigation button
+     * @param {String} selector - CSS selector of the button
+     * @return {{node: HTMLElement, text: String}}
+     * */
     this.getNavButton = function(selector){
         var button = this.querySelector(selector);
-        //console.log(this)
         return button?{
             node: button,
             text: button.value
@@ -142,6 +154,7 @@ function VRSurvey(scene){
 
     /**
      * Gets a computed `attribute` of an element (bound as `this`) and sets its `property` to a `value`
+     * @param {HTMLElement} element - HTML element of `a-instance`
      * @param {String} attribute - attribute on an element
      * @param {String} property - property in attribute
      * @param {?String} value - value for property
@@ -170,16 +183,16 @@ function VRSurvey(scene){
     this.stampQuestion=function(question){
         this.cleanupHost(TEXT);
         this.cleanupHost(ANSWERS);
-        this._currentQuestion = question;
-        getNavigationButtonsAvailability.call(this);
+        this._currentQuestion = question; //sets to the current question object
+        getNavigationButtonsAvailability.call(this); // sets buttons visible/invisible based on question position
+        this.timerStart(); // starts the timer of the time spent on the question
 
         //creating text
         if(question.text){
             this.createEntity(question.text, TEXT,{
                 geometry:'primitive:plane;width:10;height:3;',
                 position:{x:0, y: text_vp(question.answers.length),z:0.01},
-                material:'shader:html;target:#'+question.text.id+';transparent:true;ratio:width;fps:0;',
-                //'look-at':'#camera'
+                material:'shader:html;target:#'+question.text.id+';transparent:true;ratio:width;fps:0;'
             });
         }
 
@@ -189,14 +202,16 @@ function VRSurvey(scene){
                 geometry:'primitive:plane;width:10;height:2;',
                 position:{x:0, y:instruction_vp(question.answers.length),z:0.01},
                 color:'#CCC',
-                material:'shader:html;target:#'+question.instruction.id+';transparent:true;ratio:width;fps:0;',
-                //'look-at':'#camera'
+                material:'shader:html;target:#'+question.instruction.id+';transparent:true;ratio:width;fps:0;'
             });
         }
 
         //creating answers
         if(question.answers && question.answers.length>0){
-            if(!this.questionIsAnswered(question)){this.hideNextButton(true);}
+            // we want to make all questions mandatory and check if they are answered before providing navigation forward
+            if(!this.questionIsAnswered(question)){
+                this.hideNextButton(true);
+            }
             question.answers.forEach(function(answer,index){
                 this.createEntity(answer, ANSWERS,{
                     id:'label_'+answer.id,
@@ -205,16 +220,20 @@ function VRSurvey(scene){
                     material:'shader:html;target:label#'+answer.id+';transparent:true;ratio:width;fps:0',
                     clickable:reflectClick,
                     animated:true
-                    //'look-at':'#camera'
                 });
             }.bind(this));
         }
     };
 
+    /**
+     * Toggles visibility of the `Next` button based on the `bool` value
+     * @param {Boolean} bool - true=hidden
+     * */
     this.hideNextButton=function(bool){
         var next = document.querySelector('#aNext');
         if(next)next.setAttribute('visible',(!bool).toString());
     };
+
     /**
      * Creates an `a-entity` element and applies attributes to it.
      * @param {HTMLElement} obj - model containing info about the element whose snapshot is going to be taken
@@ -248,7 +267,7 @@ function VRSurvey(scene){
             delete params.clickable;
 
             if(params.animated){
-                //create `select` animation
+                //create `select` animation only for answers so far
                 this.createEntity(
                     null,
                     entity,
@@ -305,6 +324,12 @@ function VRSurvey(scene){
         }
     };
 
+    /**
+     * Checks if the individual option is checked and tweaks it's z-position
+     * @param {Object} model - model attached to the node
+     * @param {Number} defaultPos - double of the initial position of the element
+     * @return {Number} - z-position
+     * */
     function isChecked(model,defaultPos){
         if(model && model.for){
             var input = typeof model.for == 'string' ? document.querySelector(model.for) : model.for;
@@ -312,22 +337,35 @@ function VRSurvey(scene){
         } else {return defaultPos}
     }
 
+    /**
+     * Calculates vertical `y` position of an answer option
+     * @param {Number} index - index of the answer option
+     * @param {Number} length - total number of answers
+     * */
     function vp(index,length){
         var center = length>0? length/2 : 0;
         return center - (++index);
     }
+    /**
+     * Calculates vertical `y` position of a question text
+     * @param {Number} length - total number of answers
+     * */
     function text_vp(length){
         var center = length>0?Math.floor(length/2):0;
         return center-1;
     }
+    /**
+     * Calculates vertical `y` position of an instruction text
+     * @param {Number} length - total number of answers
+     * */
     function instruction_vp(length){
         var center = length>0? length/2 : 0;
         return center - 4;
     }
 
     /**
-     * this process is called on the first click within `reflectClick` for all siblings of the target as a late upgrade from string to element for the `for` key.
-     * this is necessary because initial go thought answer options when generating the model picks up wrong type for "other" radio option.
+     * Is called on the first click within `reflectClick` for all siblings of the target as a late upgrade from string to element for the `for` key.
+     * This is necessary because initial go thought answer options when generating the model picks up wrong type for "other" radio option.
      * */
     function mapFormElements(){
         if(typeof this.model.for == 'string'){
@@ -343,13 +381,10 @@ function VRSurvey(scene){
      * @param {CustomEvent} e - click CustomEvent with `detail.target`
      * */
     function reflectClick(e){
-        //console.log(e.detail.target.model);
         var entity = e.detail.target,
             formElement = mapFormElements.call(entity); //late upgrade for model of entities
-        //console.log(this);
 
         if(formElement.nodeName.toLowerCase()=='input'){
-            //console.log('isInput');
             switch(formElement.type){
                 case 'radio':
                     formElement.checked = true;
@@ -363,13 +398,13 @@ function VRSurvey(scene){
                     break;
             }
             this.setQuestionAnswered(this._currentQuestion);
-
         }
     }
 
     /**
      * checks if the clicked element might be an exclusive choice and other elements need to be unchecked
      * this is done via filtering all siblings not equal to itself and whose model type is different from the clicked one
+     * @param {HTMLElement} el - a-entity
      * */
     function checkForExclusive(el){
         var exclusive = [].slice.call(el.parentNode.children).filter(function(node){
@@ -382,6 +417,7 @@ function VRSurvey(scene){
 
     /**
      * Deselects other items, true for exclusive radio among checkboxes as well as other radios
+     * @param {HTMLElement} entity - a-entity
      * */
     function deselectOthers(entity) {
         [].slice.call(entity.parentNode.children).filter(function(node){return node!=entity}).forEach(function(el){
@@ -392,6 +428,8 @@ function VRSurvey(scene){
     /**
      * Toggles 'checked' state for answer options by taking an option closer to subject by adjusting z position by half a meter.
      * @param {Boolean} check - if `true` will check
+     * @event {Event} deselect - event emitted when the option is deselected
+     * @event {Event} select - event emitted when the option is selected
      * */
     function toggleCheckedState(check){
         var oPosition = this.getComputedAttribute('position');
@@ -407,6 +445,11 @@ function VRSurvey(scene){
         }
     }
 
+    /**
+     * Arranges layouting elements on an arch
+     * @param {{direction:Number, margin:Number, radius:Number}} data - object containing `direction (-1:right| 1:left)` in which positioning elements will take place, `margin` in rad which defines distance between elements and `radius` in meters
+     * @param {{x:Number, y:Number, z:Number}} startPosition - initial coordinates of the center point of the circle on which arch elements are placed
+     * */
     function layout(data,startPosition){
         var children = [].slice.call(this.children);
         var mLength = children.map(function(elem){return elem.getComputedAttribute('geometry').width});
@@ -414,6 +457,12 @@ function VRSurvey(scene){
         setPositions(children, positions);
     }
 
+    /**
+     * Function that does calculation of distribution of elements in a circulra fashoin on a semi-circle
+     * @param {{direction:Number, margin:Number, radius:Number}} data - object containing `direction (-1:right| 1:left)` in which positioning elements will take place, `margin` in rad which defines distance between elements and `radius` in meters
+     * @param {Array} mLength - Array of widths of elements starting with the one on 12 o'clock and going clockwise fo `data.direction ==-1` ar anticlockwise for `data.direction==1`
+     * @param {{x:Number, y:Number, z:Number}} startPosition - initial coordinates of the center point of the circle on which arch elements are placed
+     * */
     function getSeparatedCirclePositions (data, mLength, startPosition) //direction = -1 для правой части (по часовой) и 1 для левой (против часовой), mLength - массив длин
     {
         var positions=[];
@@ -438,7 +487,11 @@ function VRSurvey(scene){
         return positions;
 
     }
-
+    /**
+     * Sets start position as and attribute on an array of elements
+     * @param {Array} els - array of elements to set position on
+     * @param {Array} positions - array of positions to set to `els`
+     * */
     function setPositions (els, positions) {
         els.forEach(function (el, i) {
             var position = positions[i];
@@ -469,38 +522,80 @@ function VRSurvey(scene){
         }
     }
 
+    /**
+     * Function that does navigation. Because a survey is single-paged all 'pages' are simulated which places one question per page and navigating between them.
+     * @param {Boolean} forward - `true` if forwards, `false` if backwards navigation
+     * @param {Object} model - question's model
+     * */
     function navigateToQuestion(forward,model){
         var curQuestionNode = this._currentQuestion.node,
             index = QUESTIONS.indexOf(curQuestionNode),
             question;
-            this.backgroundChanger(index);
-        if(forward && index < QUESTIONS_LENGTH-1){
+            this.backgroundChanger(index); //change background sphere of the question
+            this.timerEnd(); //capture end time for timing function
+        if(forward && index < QUESTIONS_LENGTH-1){ //going forwards
             ++index;
             this.backgroundChanger(index);
             question = this.getQuestion(QUESTIONS[index]);
             if(question)this.stampQuestion(question);
-
-        } else if(!forward && index>0){
+        } else if(!forward && index>0){ //going backwards
             --index;
             this.backgroundChanger(index);
             question = this.getQuestion(QUESTIONS[index]);
             if(question)this.stampQuestion(question);
         } else if(forward && index == QUESTIONS_LENGTH-1 && model){ //last question and form submit
-            model.node.click();
-        } else {console.log('question index '+index+' is out of range')}
+            this.logTime();
+            window.setTimeout(function(){model.node.click()},0);
+        } else {console.warn('question index '+index+' is out of range')}
     }
 
+    /**
+     * Changes the background sphere by changing `src` attribute on the `<a-sky>` element
+     * @param {Number} index of the question against which the `model` defined on sky is searched. `model = {{defaultBG:String, backgrounds:Array}}`
+     * */
     this.backgroundChanger=function(index){
         var sky=scene.querySelector('a-sky');
-        //console.log(sky.model);
-        //console.log(index);
-        if(sky.model){
+        if(sky && sky.model){
             var defaultBG = sky.model.defaultBG;
             var questionBG = sky.model.backgrounds[index];
             var src = questionBG && questionBG.length>0?questionBG:defaultBG;
-            //console.log(src);
-
             sky.setAttribute('src',src);
+        }
+    };
+
+    /**
+     * Starts the timer when a person enters the question _for the first time_
+     * */
+    this.timerStart=function(){
+        var questionIndex = QUESTIONS.indexOf(this._currentQuestion.node);
+        if(this._currentQuestion.answers.length>0) {
+            if (!this.timer[questionIndex]) {
+                this.timer[questionIndex] = {};
+                this.timer[questionIndex].start = new Date().getTime();
+            }
+        }
+    };
+
+    /**
+     * Stops the timer when a person exits the question _for the first time_
+     * */
+    this.timerEnd=function(){
+        var questionIndex = QUESTIONS.indexOf(this._currentQuestion.node);
+        if(this._currentQuestion.answers.length>0) {
+            if (!this.timer[questionIndex].end){
+                this.timer[questionIndex].end = new Date().getTime();
+                this.timer[questionIndex].time = ((this.timer[questionIndex].end - this.timer[questionIndex].start)/1000).toFixed(0);
+            }
+        }
+    };
+
+    /**
+     * Sets the time spent on one question in seconds based on the `start` and `end` times. It sets a comma-separated string of values to the `value` of an open-text (single-line) question named with id `#excluded_timetracking`
+     * */
+    this.logTime=function(){
+        var timetracking = document.querySelector('#excluded_timetracking');
+        if(timetracking && this.timer.length>0){
+            timetracking.value = this.timer.filter(function(timer){return timer.time && !isNaN(timer.time)}).map(function(timer){return timer.time}).join(',');
         }
     };
 
@@ -607,7 +702,6 @@ function VRSurvey(scene){
         // hack for thank you finish page to enter VR mode and display info text
         if(QUESTIONS_LENGTH==1 && this._currentQuestion && this._currentQuestion.answers.length==0){scene.enterVR();}
     };
-
 
     this.init();
 
